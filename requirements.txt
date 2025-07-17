@@ -1,0 +1,4 @@
+praw
+tweepy
+requests
+python-dotenv

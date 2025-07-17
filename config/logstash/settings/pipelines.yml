@@ -1,0 +1,24 @@
+- pipeline.id: news-ingestion
+  path.config: "/usr/share/logstash/pipeline/news-ingestion.conf"
+  pipeline.workers: 2
+  
+- pipeline.id: social-media
+  path.config: "/usr/share/logstash/pipeline/social-media.conf"
+  pipeline.workers: 2
+  
+- pipeline.id: market-data
+  path.config: "/usr/share/logstash/pipeline/market-data.conf"
+  pipeline.workers: 1
+  
+- pipeline.id: webhooks
+  path.config: "/usr/share/logstash/pipeline/webhooks.conf"
+  pipeline.workers: 1
+
+
+
+- pipeline.id: reddit-pipeline
+  path.config: "/usr/share/logstash/pipeline/reddit.conf"
+- pipeline.id: twitter-pipeline
+  path.config: "/usr/share/logstash/pipeline/twitter.conf"
+# - pipeline.id: news-pipeline
+#  path.config: "/usr/share/logstash/pipeline/news.conf"

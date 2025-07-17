@@ -1,281 +1,39 @@
 version: '3.8'
 
 services:
-  # Zookeeper for Kafka
   zookeeper:
-    image: confluentinc/cp-zookeeper:latest
+    image: confluentinc/cp-zookeeper:7.3.0
+    container_name: zookeeper
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
-    ports:
-      - "2181:2181"
 
-  # Kafka
   kafka:
-    image: confluentinc/cp-kafka:latest
+    image: confluentinc/cp-kafka:7.3.0
+    container_name: kafka
     depends_on:
       - zookeeper
     ports:
       - "9092:9092"
     environment:
       KAFKA_BROKER_ID: 1
-      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,PLAINTEXT_INTERNAL://kafka:29092
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-    volumes:
-      - kafka_data:/var/lib/kafka/data
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
 
-  # Elasticsearch
-  elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
-    environment:
-      - discovery.type=single-node
-      - xpack.security.enabled=false
-      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
-    ports:
-      - "9200:9200"
-    volumes:
-      - elasticsearch_data:/usr/share/elasticsearch/data
-
-  # Logstash
   logstash:
-    image: docker.elastic.co/logstash/logstash:8.11.0
+    image: docker.elastic.co/logstash/logstash:8.6.2
+    container_name: logstash
     depends_on:
-      - elasticsearch
       - kafka
+    # Monta la pipeline di configurazione dentro il container
     volumes:
-      - ./config/logstash/pipeline:/usr/share/logstash/pipeline
-      - ./config/logstash/patterns:/usr/share/logstash/patterns
-    ports:
-      - "5044:5044"
-      - "9600:9600"
+      - ./logstash/pipeline:/usr/share/logstash/pipeline/
+    # Passa le chiavi API come variabili d'ambiente al container
     environment:
-      LS_JAVA_OPTS: "-Xmx256m -Xms256m"
-
-  # Spark Master
-  spark-master:
-    image: bitnami/spark:3.5
-    environment:
-      - SPARK_MODE=master
-      - SPARK_RPC_AUTHENTICATION_ENABLED=no
-      - SPARK_RPC_ENCRYPTION_ENABLED=no
-      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
-      - SPARK_SSL_ENABLED=no
-    ports:
-      - "8080:8080"
-      - "7077:7077"
-    volumes:
-      - ./src/data-processing/spark-jobs:/opt/spark-jobs
-
-  # Spark Worker
-  spark-worker:
-    image: bitnami/spark:3.5
-    depends_on:
-      - spark-master
-    environment:
-      - SPARK_MODE=worker
-      - SPARK_MASTER_URL=spark://spark-master:7077
-      - SPARK_WORKER_MEMORY=1G
-      - SPARK_WORKER_CORES=1
-      - SPARK_RPC_AUTHENTICATION_ENABLED=no
-      - SPARK_RPC_ENCRYPTION_ENABLED=no
-      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
-      - SPARK_SSL_ENABLED=no
-    volumes:
-      - ./src/data-processing/spark-jobs:/opt/spark-jobs
-
-  # Grafana
-  grafana:
-    image: grafana/grafana:latest
-    depends_on:
-      - elasticsearch
-    ports:
-      - "3000:3000"
-    environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin123
-    volumes:
-      - grafana_data:/var/lib/grafana
-      - ./config/grafana/dashboards:/var/lib/grafana/dashboards
-      - ./config/grafana/datasources:/etc/grafana/provisioning/datasources
-
-  # Redis (for caching)
-  redis:
-    image: redis:alpine
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-
-  # API Backend
-  api-backend:
-    build: ./src/api/fastapi-backend
-    depends_on:
-      - elasticsearch
-      - redis
-      - kafka
-    ports:
-      - "8000:8000"
-    environment:
-      - ELASTICSEARCH_URL=http://elasticsearch:9200
-      - REDIS_URL=redis://redis:6379
-      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
-    volumes:
-      - ./src/api/fastapi-backend:/app
-
-  # Frontend Dashboard
-  frontend:
-    build: ./src/frontend/react-dashboard
-    depends_on:
-      - api-backend
-    ports:
-      - "3001:3000"
-    environment:
-      - REACT_APP_API_URL=http://localhost:8000
-    volumes:
-      - ./src/frontend/react-dashboard:/app
-
-volumes:
-  kafka_data:
-  elasticsearch_data:
-  grafana_data:
-  redis_dataversion: '3.8'
-
-services:
-  # Zookeeper for Kafka
-  zookeeper:
-    image: confluentinc/cp-zookeeper:latest
-    environment:
-      ZOOKEEPER_CLIENT_PORT: 2181
-      ZOOKEEPER_TICK_TIME: 2000
-    ports:
-      - "2181:2181"
-
-  # Kafka
-  kafka:
-    image: confluentinc/cp-kafka:latest
-    depends_on:
-      - zookeeper
-    ports:
-      - "9092:9092"
-    environment:
-      KAFKA_BROKER_ID: 1
-      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-    volumes:
-      - kafka_data:/var/lib/kafka/data
-
-  # Elasticsearch
-  elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
-    environment:
-      - discovery.type=single-node
-      - xpack.security.enabled=false
-      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
-    ports:
-      - "9200:9200"
-    volumes:
-      - elasticsearch_data:/usr/share/elasticsearch/data
-
-  # Logstash
-  logstash:
-    image: docker.elastic.co/logstash/logstash:8.11.0
-    depends_on:
-      - elasticsearch
-      - kafka
-    volumes:
-      - ./config/logstash/pipeline:/usr/share/logstash/pipeline
-      - ./config/logstash/patterns:/usr/share/logstash/patterns
-    ports:
-      - "5044:5044"
-      - "9600:9600"
-    environment:
-      LS_JAVA_OPTS: "-Xmx256m -Xms256m"
-
-  # Spark Master
-  spark-master:
-    image: bitnami/spark:3.5
-    environment:
-      - SPARK_MODE=master
-      - SPARK_RPC_AUTHENTICATION_ENABLED=no
-      - SPARK_RPC_ENCRYPTION_ENABLED=no
-      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
-      - SPARK_SSL_ENABLED=no
-    ports:
-      - "8080:8080"
-      - "7077:7077"
-    volumes:
-      - ./src/data-processing/spark-jobs:/opt/spark-jobs
-
-  # Spark Worker
-  spark-worker:
-    image: bitnami/spark:3.5
-    depends_on:
-      - spark-master
-    environment:
-      - SPARK_MODE=worker
-      - SPARK_MASTER_URL=spark://spark-master:7077
-      - SPARK_WORKER_MEMORY=1G
-      - SPARK_WORKER_CORES=1
-      - SPARK_RPC_AUTHENTICATION_ENABLED=no
-      - SPARK_RPC_ENCRYPTION_ENABLED=no
-      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
-      - SPARK_SSL_ENABLED=no
-    volumes:
-      - ./src/data-processing/spark-jobs:/opt/spark-jobs
-
-  # Grafana
-  grafana:
-    image: grafana/grafana:latest
-    depends_on:
-      - elasticsearch
-    ports:
-      - "3000:3000"
-    environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin123
-    volumes:
-      - grafana_data:/var/lib/grafana
-      - ./config/grafana/dashboards:/var/lib/grafana/dashboards
-      - ./config/grafana/datasources:/etc/grafana/provisioning/datasources
-
-  # Redis (for caching)
-  redis:
-    image: redis:alpine
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-
-  # API Backend
-  api-backend:
-    build: ./src/api/fastapi-backend
-    depends_on:
-      - elasticsearch
-      - redis
-      - kafka
-    ports:
-      - "8000:8000"
-    environment:
-      - ELASTICSEARCH_URL=http://elasticsearch:9200
-      - REDIS_URL=redis://redis:6379
-      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
-    volumes:
-      - ./src/api/fastapi-backend:/app
-
-  # Frontend Dashboard
-  frontend:
-    build: ./src/frontend/react-dashboard
-    depends_on:
-      - api-backend
-    ports:
-      - "3001:3000"
-    environment:
-      - REACT_APP_API_URL=http://localhost:8000
-    volumes:
-      - ./src/frontend/react-dashboard:/app
-
-volumes:
-  kafka_data:
-  elasticsearch_data:
-  grafana_data:
-  redis_data:
+      # Assicurati che il file .env sia nella stessa cartella di docker-compose
+      - ALPHA_VANTAGE_API_KEY=${ALPHA_VANTAGE_API_KEY}
+      - NEWSAPI_KEY=${NEWSAPI_KEY}

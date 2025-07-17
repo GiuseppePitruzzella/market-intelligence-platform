@@ -1,0 +1,22 @@
+# monitoring/logstash-monitoring.yml
+input {
+  http {
+    port => 9601
+    type => "logstash_monitoring"
+  }
+}
+
+filter {
+  if [type] == "logstash_monitoring" {
+    json {
+      source => "message"
+    }
+  }
+}
+
+output {
+  elasticsearch {
+    hosts => ["elasticsearch:9200"]
+    index => "logstash-monitoring-%{+YYYY.MM.dd}"
+  }
+}
